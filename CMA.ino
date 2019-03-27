@@ -8,6 +8,8 @@
 #include <EDB.h>
 
 
+
+
 #define RST_PIN_rc522         48           // Configurable, see typical pin layout 
 #define SS_PIN_rc522          53         // Configurable, see typical pin layout 
 
@@ -40,11 +42,12 @@ char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursd
  */
 #define RST_PIN_SD            1
 #define SS_PIN_SD             41
-char* card_ids = "/cards.txt"; //Read only for this program
-char* user_names = "/users.txt";
-char* logs = "/usage_logs.csv";
+const char* card_ids = "/cards.txt";  //Read only for this program
+const char* user_names = "/users.txt";  // Read only for this program
+char* logs;
 File myFile;
 File xFile;
+File usrFile;
 String buffert;
 String uid_str;
 
@@ -60,6 +63,7 @@ File dbFile;
 
 
 void setup() {
+  
     //Serial communications with PC
     Serial.begin(9600); // Initialize serial communications with the PC
     while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
@@ -95,6 +99,8 @@ void setup() {
       Serial.println("Couldn't find RTC Module");
       while (1);
   }
+
+  
 }
 
 //Function Declarations
@@ -103,11 +109,14 @@ String get_datestring(); //Get the date as a string
 String get_timestring(); //Get the time as a string
 String get_dayofweekstr();  //Get the day of the week as a string
 int search_id(unsigned long uidd);
+String get_usrname(int index); //Display corresponding username from the matched index
+void disp_swiped(int index); //Display info when swiping card
+void log_swiped(unsigned long uidd, int index, bool flag); // Store usage log into SD card
 
 
 
-void loop() {
-  
+
+void loop() {  
   
   if(mfrc522.PICC_IsNewCardPresent()) {
   unsigned long uid = getID();
@@ -122,18 +131,22 @@ void loop() {
     display.setTextSize(4);             // Normal 1:1 pixel scale
     display.setTextColor(WHITE);        // Draw white text
     display.setCursor(0,0);
-    display.println(uid,HEX);
-    display.display();
+    //display.println(uid,HEX);
+    //display.display();
     unsigned long start,stopp;
     Serial.println("Into search fn");
     start = millis();
     int a = search_id(uid);
+    display.println(a);
+    display.display();
     stopp = millis();
     Serial.print("Time taken:");
     Serial.println((stopp-start));
     Serial.print("Index:");
     Serial.println(a);
     Serial.println("Out of search fn");
+    disp_swiped(a);
+    log_swiped(uid,a,false);
     
     }
   }
@@ -208,6 +221,46 @@ int search_id(unsigned long uidd){
   }
 }
 
+void disp_swiped(int index){
+  String usr_name = get_usrname(index);
+  /*
+  usrFile = SD.open(user_names);
+  
+  if (usrFile) {  //If the file exists
+    //Linear read from file, top to bottom till 
+    
+    int i=0;
+    for(i=0 ; usrFile.available() && i<=index ; i++) {
+      usr_name = usrFile.readStringUntil('\n');
+    }
+  */
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setCursor(0,0);
+    display.print("ID:");
+    display.println(index);
+    display.setCursor(0,28);
+    display.print("User:");
+    display.print(usr_name);
+    display.display();
+}
+
+String get_usrname(int index){
+  usrFile = SD.open(user_names);
+  String usr_name;
+  if (usrFile) {  //If the file exists
+    //Linear read from file, top to bottom till 
+    
+    int i=0;
+    for(i=0 ; usrFile.available() && i<=index ; i++) {
+      usr_name = usrFile.readStringUntil('\n');
+    }
+  usrFile.close();
+  }
+  return usr_name;
+  
+}
+
 String get_datestring(){
   DateTime now = rtc.now();
   String date = String(now.day())+'/'+String(now.month())+'/'+String(now.year());
@@ -219,9 +272,30 @@ String get_timestring(){
   String timestr = String(now.hour())+':'+String(now.minute())+':'+String(now.second());
   return timestr;
 }
-
+ 
 String get_dayofweekstr(){
   DateTime now = rtc.now();
   String dow = String(daysOfTheWeek[now.dayOfTheWeek()]);
   return dow;
 }
+
+void log_swiped(unsigned long uidd, int index, bool flag){
+  DateTime now = rtc.now();
+  String flg;
+  if(flag){
+    flg = "N1";
+  }
+  else{
+    flg = "N0";
+  }
+  String logfilename_rd = flg + String(now.year()) + String(now.month())+".csv";
+  File logFile_rd = SD.open(logfilename_rd, FILE_WRITE);
+  String entry_rd = String(uidd,HEX)+","+get_usrname(index)+","+get_datestring()+","+get_timestring();
+  Serial.println(entry_rd);
+  //char* a;
+  //strcpy(a,entry_rd.c_str());
+  logFile_rd.println(entry_rd);
+  logFile_rd.close();
+  
+}
+  
