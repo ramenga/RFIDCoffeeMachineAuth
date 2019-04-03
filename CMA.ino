@@ -7,6 +7,9 @@
 #include "RTClib.h"
 #include <EDB.h>
 
+#define C_PIN 13
+
+#define DISP_TIMEOUT 7000
 
 
 
@@ -26,6 +29,9 @@ int readSuccessful;
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET    -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+unsigned long timepiece;
+bool dispState = false;
+bool lastDispState = false;
  
 
 /*
@@ -35,7 +41,10 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 DateTime now;
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
-
+//Clock Display when Idle
+unsigned long clockcounter;
+bool clockState = false;
+bool lastClockState = false;
 
 /*
  * SD Card Segment
@@ -100,6 +109,10 @@ void setup() {
       while (1);
   }
 
+  //Pins for Output
+  pinMode(C_PIN,OUTPUT);
+  digitalWrite(C_PIN,LOW);
+
   
 }
 
@@ -112,6 +125,8 @@ int search_id(unsigned long uidd);
 String get_usrname(int index); //Display corresponding username from the matched index
 void disp_swiped(int index); //Display info when swiping card
 void log_swiped(unsigned long uidd, int index, bool flag); // Store usage log into SD card
+void activate_machine(); //Activate the coffee machine
+void disp_clock(); //Display clockface (current) 
 
 
 
@@ -127,8 +142,9 @@ void loop() {
     Serial.println(get_datestring());
     Serial.println(get_dayofweekstr());
     Serial.println(get_timestring());
+    
     display.clearDisplay();
-    display.setTextSize(4);             // Normal 1:1 pixel scale
+    display.setTextSize(4);             
     display.setTextColor(WHITE);        // Draw white text
     display.setCursor(0,0);
     //display.println(uid,HEX);
@@ -137,19 +153,58 @@ void loop() {
     Serial.println("Into search fn");
     start = millis();
     int a = search_id(uid);
-    display.println(a);
-    display.display();
+    //display.println(a);
+    //display.display();
     stopp = millis();
     Serial.print("Time taken:");
     Serial.println((stopp-start));
     Serial.print("Index:");
     Serial.println(a);
     Serial.println("Out of search fn");
-    disp_swiped(a);
-    log_swiped(uid,a,false);
+    disp_swiped(a); //Display swiped card info
+    dispState = true;
+    log_swiped(uid,a,false);  // Log the swiped card to file
+    activate_machine(); // Activate the Coffee Machine
+
     
-    }
   }
+  }
+
+  if (dispState != lastDispState){
+      timepiece = millis();
+      lastDispState = dispState;
+      Serial.print("Timepiece:");
+      Serial.println(timepiece);
+    }
+  if (((millis() - timepiece) > DISP_TIMEOUT) && (dispState == true)  ) {
+    //Turn off display after a certain timeout, when the card is swiped
+    /*
+    // if the button state has changed:
+    if (reading != buttonState) {
+      buttonState = reading;
+
+      // only toggle the LED if the new button state is HIGH
+      if (buttonState == HIGH) {
+        ledState = !ledState;
+      }
+    */
+
+      
+      display.clearDisplay();
+      display.display();
+      Serial.println("ClearDisp");
+      lastDispState = false;
+      dispState = false;
+      
+      //Now clock is safe to be displayed again
+      clockState = true;
+    }
+
+    if ( clockState == true ){
+      //Now you can update the clock
+      Serial.println("CLOCK");
+      disp_clock();
+    }
 
 }
 
@@ -195,15 +250,7 @@ int search_id(unsigned long uidd){
       
       unsigned long A = (unsigned long) strtoul(a,NULL,16);
       
-      /*
-      Serial.print("buffert:");
-      Serial.println(buffert);
-      Serial.print("uidstr:");
-      Serial.println(uid_str);
-      Serial.print("A:");
-      Serial.println(A,HEX);
-      */
-      
+    
       if(A==uidd){
         //Serial.println("MATCHES");
         break;
@@ -222,6 +269,7 @@ int search_id(unsigned long uidd){
 }
 
 void disp_swiped(int index){
+  clockState = false; //Disable displaying of clock
   String usr_name = get_usrname(index);
   /*
   usrFile = SD.open(user_names);
@@ -235,12 +283,17 @@ void disp_swiped(int index){
     }
   */
     display.clearDisplay();
+
+    display.drawLine(0, 0, 128, 0, WHITE);
+    display.drawLine(0, 0, 0, 64, WHITE);
+    display.drawLine(0, 63, 127, 63, WHITE);
+    display.drawLine(127, 0, 127, 63, WHITE);
+    
     display.setTextSize(2);
     display.setCursor(0,0);
-    display.print("ID:");
-    display.println(index);
-    display.setCursor(0,28);
-    display.print("User:");
+    
+    display.println("  Welcome  ");
+    display.setTextSize(2);
     display.print(usr_name);
     display.display();
 }
@@ -249,7 +302,7 @@ String get_usrname(int index){
   usrFile = SD.open(user_names);
   String usr_name;
   if (usrFile) {  //If the file exists
-    //Linear read from file, top to bottom till 
+    //Linear read from file, top to bottom till match is found
     
     int i=0;
     for(i=0 ; usrFile.available() && i<=index ; i++) {
@@ -257,6 +310,7 @@ String get_usrname(int index){
     }
   usrFile.close();
   }
+  usr_name.trim();
   return usr_name;
   
 }
@@ -282,20 +336,69 @@ String get_dayofweekstr(){
 void log_swiped(unsigned long uidd, int index, bool flag){
   DateTime now = rtc.now();
   String flg;
-  if(flag){
-    flg = "N1";
+  if(flag){ // Flag for ACK feature in future
+    flg = "1";
   }
   else{
-    flg = "N0";
+    flg = "0";
   }
-  String logfilename_rd = flg + String(now.year()) + String(now.month())+".csv";
+  String logfilename_rd = "R" + flg + String(now.year()) + String(now.month())+".csv";
+  String logfilename_ur = "U" + flg + String(now.year()) + String(now.month())+".csv";
+  String uid_ = String(uidd,HEX);
+  uid_.toUpperCase();
+  //For Human Readable CSV
   File logFile_rd = SD.open(logfilename_rd, FILE_WRITE);
-  String entry_rd = String(uidd,HEX)+","+get_usrname(index)+","+get_datestring()+","+get_timestring();
+  String entry_rd = uid_ + ","+get_usrname(index)+","+get_datestring()+","+get_timestring();
   Serial.println(entry_rd);
-  //char* a;
-  //strcpy(a,entry_rd.c_str());
+
+
   logFile_rd.println(entry_rd);
   logFile_rd.close();
+
+  //For Machine Read Optimised CSV
+  File logFile_ur = SD.open(logfilename_ur, FILE_WRITE);
+  //String entry_ur = String(uidd,HEX)+","+get_usrname(index)+","+get_datestring()+","+get_timestring();
+  //String(now.day())+'/'+String(now.month())+'/'+String(now.year());
+  //String(now.hour())+':'+String(now.minute())+':'+String(now.second());
+  logFile_ur.print(uid_);
+  logFile_ur.print(",");
+  logFile_ur.print(get_usrname(index));
+  logFile_ur.print(",");
+  logFile_ur.print(now.year());
+  logFile_ur.print(",");
+  logFile_ur.print(now.month());
+  logFile_ur.print(",");
+  logFile_ur.print(now.day());
+  logFile_ur.print(",");
+  logFile_ur.print(now.hour());
+  logFile_ur.print(",");
+  logFile_ur.print(now.minute());
+  logFile_ur.print(",");
+  logFile_ur.println(now.second());
   
+  //logFile_ur.println(entry_ur);
+  logFile_ur.close();
 }
-  
+
+void activate_machine(){
+  digitalWrite(C_PIN, HIGH);
+  delay(1000);
+  digitalWrite(C_PIN, LOW);
+}
+
+void disp_clock(){
+  display.clearDisplay();
+  display.drawLine(0, 0, 128, 0, WHITE);
+  display.drawLine(0, 0, 0, 64, WHITE);
+  display.drawLine(0, 63, 127, 63, WHITE);
+  display.drawLine(127, 0, 127, 63, WHITE);
+  //Draw DoW
+  display.setCursor(2,5);
+  display.setTextSize(0);   
+  display.print("Today is ");
+  display.print(get_dayofweekstr());
+  display.setCursor(3,32);
+  display.setTextSize(2);   
+  display.print(get_timestring());
+  display.display();
+}
