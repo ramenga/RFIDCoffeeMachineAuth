@@ -436,7 +436,7 @@ void disp_clock(){
 void bluetooth_interface(){
   //Some graphics
   display.clearDisplay();
-  Serial1.println("NIELIT Coffee Machine 2000");
+  Serial1.println("Knight Industries Coffee Machine 2000");
   Serial1.println("Please state the nature of the Coffee Emergency");
   /*
   while(!Serial1.available()){
