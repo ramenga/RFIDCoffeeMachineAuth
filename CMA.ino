@@ -6,20 +6,22 @@
 #include <Adafruit_SSD1306.h>
 #include "RTClib.h"
 #include <EDB.h>
+#include<Fonts/LatoLight.h>
 
 #define C_PIN 13
 
 #define DISP_TIMEOUT 7000
 
-
-
 #define RST_PIN_rc522         48           // Configurable, see typical pin layout 
 #define SS_PIN_rc522          53         // Configurable, see typical pin layout 
+
+int counter[100] = {0}; //Now supports a MAX of THIS MUCH of cards
 
 MFRC522 mfrc522(SS_PIN_rc522, RST_PIN_rc522);   // Create MFRC522 instance.
 MFRC522::MIFARE_Key key;
 byte readCard[4];
 int readSuccessful;
+
 
 /*
  *Display Segment 
@@ -41,6 +43,7 @@ bool lastDispState = false;
 DateTime now;
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+char monthsOfYear[12][12] = {"January", "February", "March", "April", "May", "June", "July" , "August","September","October","November","December"};
 //Clock Display when Idle
 unsigned long clockcounter;
 bool clockState = false;
@@ -57,6 +60,7 @@ char* logs;
 File myFile;
 File xFile;
 File usrFile;
+File bt1File;
 String buffert;
 String uid_str;
 
@@ -75,7 +79,10 @@ void setup() {
   
     //Serial communications with PC
     Serial.begin(9600); // Initialize serial communications with the PC
-    while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
+    //while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
+
+    //Serial communications for Bluetooth Module
+    Serial1.begin(9600);
     
     SPI.begin();        // Init SPI bus
 
@@ -127,6 +134,7 @@ void disp_swiped(int index); //Display info when swiping card
 void log_swiped(unsigned long uidd, int index, bool flag); // Store usage log into SD card
 void activate_machine(); //Activate the coffee machine
 void disp_clock(); //Display clockface (current) 
+void bluetooth_interface(); //Go into the bluetooth interface
 
 
 
@@ -153,6 +161,11 @@ void loop() {
     Serial.println("Into search fn");
     start = millis();
     int a = search_id(uid);
+    
+    if(a==50){ 
+      bluetooth_interface(); //Admin Mode
+    }
+    
     //display.println(a);
     //display.display();
     stopp = millis();
@@ -198,11 +211,12 @@ void loop() {
       
       //Now clock is safe to be displayed again
       clockState = true;
+      display.setFont();
     }
 
     if ( clockState == true ){
       //Now you can update the clock
-      Serial.println("CLOCK");
+      
       disp_clock();
     }
 
@@ -268,7 +282,7 @@ int search_id(unsigned long uidd){
   }
 }
 
-void disp_swiped(int index){
+void disp_swiped(int index){  ///SWIPED DISPLAY
   clockState = false; //Disable displaying of clock
   String usr_name = get_usrname(index);
   /*
@@ -284,16 +298,17 @@ void disp_swiped(int index){
   */
     display.clearDisplay();
 
-    display.drawLine(0, 0, 128, 0, WHITE);
-    display.drawLine(0, 0, 0, 64, WHITE);
-    display.drawLine(0, 63, 127, 63, WHITE);
-    display.drawLine(127, 0, 127, 63, WHITE);
+    display.drawLine(0, 0, 128, 0, WHITE);//Top
+    display.drawLine(0, 0, 0, 16, WHITE); //Left
+    //display.drawLine(0, 63, 58, 63, WHITE); //Bottom
+    //display.drawLine(68, 63, 127, 63, WHITE); //Bottom
+    display.drawLine(127, 0, 127, 16, WHITE); //Right
+    display.setFont(&Open_Sans_Light_15);
+    display.setTextSize(0);
+    display.setCursor(8,14);
     
-    display.setTextSize(2);
-    display.setCursor(0,0);
-    
-    display.println("  Welcome  ");
-    display.setTextSize(2);
+    display.println("Welcome !!");
+    display.setTextSize(1);
     display.print(usr_name);
     display.display();
 }
@@ -323,7 +338,10 @@ String get_datestring(){
 
 String get_timestring(){
   DateTime now = rtc.now();
-  String timestr = String(now.hour())+':'+String(now.minute())+':'+String(now.second());
+  String ampm =" AM";
+  if(now.hour()/12 >= 1)
+    ampm = " PM";
+  String timestr = String(now.hour()%12)+':'+String(now.minute())+':'+String(now.second()+ampm);
   return timestr;
 }
  
@@ -342,8 +360,17 @@ void log_swiped(unsigned long uidd, int index, bool flag){
   else{
     flg = "0";
   }
-  String logfilename_rd = "R" + flg + String(now.year()) + String(now.month())+".csv";
-  String logfilename_ur = "U" + flg + String(now.year()) + String(now.month())+".csv";
+  
+  String logfilename_rd;
+  String logfilename_ur;
+  if(now.month()/10 < 1){
+      logfilename_rd = "R" + flg + String(now.year()) +"0"+ String(now.month())+".csv";
+      logfilename_ur = "U" + flg + String(now.year()) +"0"+ String(now.month())+".csv";
+  }
+  else{
+      logfilename_rd = "R" + flg + String(now.year()) + String(now.month())+".csv";
+      logfilename_ur = "U" + flg + String(now.year()) + String(now.month())+".csv";
+  }
   String uid_ = String(uidd,HEX);
   uid_.toUpperCase();
   //For Human Readable CSV
@@ -388,17 +415,64 @@ void activate_machine(){
 
 void disp_clock(){
   display.clearDisplay();
+  
+  //Draw Lines on edges
   display.drawLine(0, 0, 128, 0, WHITE);
   display.drawLine(0, 0, 0, 64, WHITE);
   display.drawLine(0, 63, 127, 63, WHITE);
   display.drawLine(127, 0, 127, 63, WHITE);
+  
   //Draw DoW
-  display.setCursor(2,5);
+  display.setCursor(3,5);
   display.setTextSize(0);   
   display.print("Today is ");
   display.print(get_dayofweekstr());
-  display.setCursor(3,32);
-  display.setTextSize(2);   
+  display.setCursor(3,25);
+  display.setTextSize(2);
   display.print(get_timestring());
   display.display();
+}
+
+void bluetooth_interface(){
+  //Some graphics
+  display.clearDisplay();
+  Serial1.println("NIELIT Coffee Machine 2000");
+  Serial1.println("Please state the nature of the Coffee Emergency");
+  /*
+  while(!Serial1.available()){
+    //Wait till serial data is present
+  }
+  */
+  String ektar = Serial1.readString();
+  String portra = "201904"; //Internal testing purposes till next line
+  ektar = portra;
+  
+  String line;
+  File bt1File = SD.open("U0"+ektar+".csv",FILE_READ);
+  while (bt1File.available()) {
+      line = bt1File.readStringUntil('\n');
+      unsigned long value;
+      for (int i = 0; i < line.length(); i++) {
+         if (line.substring(i, i+1) == ",") {
+              //Convert the first delimited to ULong
+              char a[8];
+              strcpy(a,line.substring(0, i).c_str());
+              value = (unsigned long) strtoul(a,NULL,16);
+      
+              //Serial.println(line.substring(0, i));
+              //Serial.println(value,HEX);
+              Serial.println(search_id(value));
+              //secondVal = line.substring(i+1)
+              break;
+         }
+      }
+
+      
+      
+      Serial.println(line);
+      
+    }
+  // close the file:
+  bt1File.close();
+  
 }
