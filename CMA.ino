@@ -12,6 +12,9 @@
 
 #define DISP_TIMEOUT 7000
 
+#define ADMIN_CRD_1 49 //Admin Card for viewing Logs
+#define ADMIN_CRD_2 50 //ADmin Card 
+
 #define RST_PIN_rc522         48           // Configurable, see typical pin layout 
 #define SS_PIN_rc522          53         // Configurable, see typical pin layout 
 
@@ -57,10 +60,12 @@ bool lastClockState = false;
 const char* card_ids = "/cards.txt";  //Read only for this program
 const char* user_names = "/users.txt";  // Read only for this program
 char* logs;
-File myFile;
+int users = 0; //To store number of users at starttime 
+File zFile;
 File xFile;
 File usrFile;
 File bt1File;
+File countFile;
 String buffert;
 String uid_str;
 
@@ -82,7 +87,7 @@ void setup() {
     //while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
 
     //Serial communications for Bluetooth Module
-    Serial1.begin(9600);
+    Serial2.begin(9600);
     
     SPI.begin();        // Init SPI bus
 
@@ -115,6 +120,22 @@ void setup() {
       Serial.println("Couldn't find RTC Module");
       while (1);
   }
+
+  //Determine number of users in USERS.TXT file
+  zFile = SD.open(card_ids,FILE_READ);
+  if (zFile) {
+    //Linear read from file, top to bottom
+    //Serial.print("xFiles:");
+    while (zFile.available()) {
+      String z = zFile.readStringUntil('\n'); //A Line of file
+      
+      users+=1;
+      
+    }
+  }
+  zFile.close();
+  Serial.print("No. of Users");
+  Serial.println(users);
 
   //Pins for Output
   pinMode(C_PIN,OUTPUT);
@@ -164,6 +185,7 @@ void loop() {
     
     if(a==50){ 
       bluetooth_interface(); //Admin Mode
+      goto exits;
     }
     
     //display.println(a);
@@ -182,6 +204,7 @@ void loop() {
     
   }
   }
+  exits:
 
   if (dispState != lastDispState){
       timepiece = millis();
@@ -246,25 +269,18 @@ int search_id(unsigned long uidd){
     int x=0;
     while (xFile.available()) {
  
-      
       buffert = xFile.readStringUntil('\n'); //A Line of file
       
       uid_str = String(uidd,HEX);
       uid_str.toUpperCase();
       buffert.toUpperCase();
-      
-      //Serial.println(buffert);
-      
-      //a is input from file
-      //b is input from card(active)
+
       char a[8];
-      //char b[8];
+      
       strcpy(a,buffert.c_str());
-      //strcpy(b,uid_str.c_str());
-      
+            
       unsigned long A = (unsigned long) strtoul(a,NULL,16);
-      
-    
+          
       if(A==uidd){
         //Serial.println("MATCHES");
         break;
@@ -436,20 +452,37 @@ void disp_clock(){
 void bluetooth_interface(){
   //Some graphics
   display.clearDisplay();
-  Serial1.println("Knight Industries Coffee Machine 2000");
-  Serial1.println("Please state the nature of the Coffee Emergency");
-  /*
-  while(!Serial1.available()){
+  Serial2.println("KNI Coffee Machine 2000");
+  Serial2.println("Please state the nature of the Coffee Emergency");
+  
+  while(!Serial2.available()){
     //Wait till serial data is present
   }
-  */
-  String ektar = Serial1.readString();
-  String portra = "201904"; //Internal testing purposes till next line
-  ektar = portra;
+  
+  String ektar = Serial2.readString();
+  //String portra = "201904"; //Internal testing purposes till next line
+  //ektar = portra;
   
   String line;
+  ektar.trim(); //Remove white spaces or \n
+  if ( !SD.exists("U0"+ektar+".csv")){
+    Serial2.println("DATA_DONT_EXIST");
+    goto ends;
+  }
   File bt1File = SD.open("U0"+ektar+".csv",FILE_READ);
-  while (bt1File.available()) {
+  
+  /*
+  String countFileName = "L"+ektar;
+  if (SD.exists(countFileName)){ //New file to be created every instance
+    SD.remove(countFileName);
+  }
+  File countFile = SD.open(countFileName,FILE_WRITE);
+  */
+  
+  //Reset counter variable
+  memset(counter, 0, sizeof(counter));
+  
+  while (bt1File.available()) { //Counting of logs for each ID
       line = bt1File.readStringUntil('\n');
       unsigned long value;
       for (int i = 0; i < line.length(); i++) {
@@ -461,18 +494,48 @@ void bluetooth_interface(){
       
               //Serial.println(line.substring(0, i));
               //Serial.println(value,HEX);
-              Serial.println(search_id(value));
+              int index_ = search_id(value);
+              counter[index_] += 1;
+              //Serial.println(index_);
               //secondVal = line.substring(i+1)
               break;
          }
       }
-
       
+      //Serial.println(line);
       
-      Serial.println(line);
-      
-    }
-  // close the file:
+  }
   bt1File.close();
+
+  String countFileName = "L"+ektar+".csv";
+  if (SD.exists(countFileName)){ //New file to be created every instance, deleting old one
+    SD.remove(countFileName);
+  }
+  countFile = SD.open(countFileName,FILE_WRITE);
+
+  
+  for(int z=0; z<users ; z++){
+    //Serial.print(z);
+    //Serial.print(":");
+    //Serial.println(counter[z]);
+    String entry_z = String(z) + "," +get_usrname(z) +"," + counter[z];
+    //Serial.println(entry_z);
+    countFile.println(entry_z);
+  }
+  countFile.close();
+  countFile = SD.open(countFileName,FILE_READ);
+  if (countFile) {
+    //Linear read from file, top to bottom
+    //Serial.print("xFiles:");
+    Serial2.println("READY_OK");
+    while (countFile.available()) {
+      String z = countFile.readStringUntil('\n'); //A Line of file
+      Serial2.println(z);
+    }
+  }
+  countFile.close();
+  ends: 
+  Serial.println("BT mOde Exit"); 
+  // close the file:
   
 }
