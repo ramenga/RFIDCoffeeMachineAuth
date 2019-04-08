@@ -18,7 +18,7 @@
 #define RST_PIN_rc522         48           // Configurable, see typical pin layout 
 #define SS_PIN_rc522          53         // Configurable, see typical pin layout 
 
-int counter[100] = {0}; //Now supports a MAX of THIS MUCH of cards
+int counter[200] = {0}; //Now supports a MAX of THIS MUCH of cards. Change according to requirements.
 
 MFRC522 mfrc522(SS_PIN_rc522, RST_PIN_rc522);   // Create MFRC522 instance.
 MFRC522::MIFARE_Key key;
@@ -137,7 +137,7 @@ void setup() {
   Serial.print("No. of Users");
   Serial.println(users);
 
-  //Pins for Output
+  //Pins for Coffee Machine Activate pin
   pinMode(C_PIN,OUTPUT);
   digitalWrite(C_PIN,LOW);
 
@@ -146,6 +146,7 @@ void setup() {
 
 //Function Declarations
 unsigned long getID();  //Get ID of RFID card
+String append_zero(int num); //Add zeros before single digit numbers and return as string
 String get_datestring(); //Get the date as a string
 String get_timestring(); //Get the time as a string
 String get_dayofweekstr();  //Get the day of the week as a string
@@ -301,17 +302,7 @@ int search_id(unsigned long uidd){
 void disp_swiped(int index){  ///SWIPED DISPLAY
   clockState = false; //Disable displaying of clock
   String usr_name = get_usrname(index);
-  /*
-  usrFile = SD.open(user_names);
-  
-  if (usrFile) {  //If the file exists
-    //Linear read from file, top to bottom till 
-    
-    int i=0;
-    for(i=0 ; usrFile.available() && i<=index ; i++) {
-      usr_name = usrFile.readStringUntil('\n');
-    }
-  */
+
     display.clearDisplay();
 
     display.drawLine(0, 0, 128, 0, WHITE);//Top
@@ -348,7 +339,7 @@ String get_usrname(int index){
 
 String get_datestring(){
   DateTime now = rtc.now();
-  String date = String(now.day())+'/'+String(now.month())+'/'+String(now.year());
+  String date = String(now.day())+'/'+String(monthsOfYear[now.month()])+'/'+String(now.year());
   return date;
 }
 
@@ -365,6 +356,14 @@ String get_dayofweekstr(){
   DateTime now = rtc.now();
   String dow = String(daysOfTheWeek[now.dayOfTheWeek()]);
   return dow;
+}
+
+String append_zero(int num){
+  if(num<10){
+    return "0"+String(num);
+  }
+  else
+    return String(num);
 }
 
 void log_swiped(unsigned long uidd, int index, bool flag){
@@ -452,8 +451,12 @@ void disp_clock(){
 void bluetooth_interface(){
   //Some graphics
   display.clearDisplay();
-  Serial2.println("KNI Coffee Machine 2000");
+  
+  Serial2.println("NIELIT Coffee Machine 2000");
   Serial2.println("Please state the nature of the Coffee Emergency");
+
+  //Put some connection checking condition here
+  Serial2.println("READY_OK");
   
   while(!Serial2.available()){
     //Wait till serial data is present
@@ -463,22 +466,19 @@ void bluetooth_interface(){
   //String portra = "201904"; //Internal testing purposes till next line
   //ektar = portra;
   
+  if(ektar.equals("SETTIME"){ //Time setting cases
+    Serial.println("Setting the time");
+    //Setting time interface here
+    
+  }
   String line;
-  ektar.trim(); //Remove white spaces or \n
+  ektar.trim(); //Remove white spaces or '\n'
   if ( !SD.exists("U0"+ektar+".csv")){
     Serial2.println("DATA_DONT_EXIST");
     goto ends;
   }
   File bt1File = SD.open("U0"+ektar+".csv",FILE_READ);
-  
-  /*
-  String countFileName = "L"+ektar;
-  if (SD.exists(countFileName)){ //New file to be created every instance
-    SD.remove(countFileName);
-  }
-  File countFile = SD.open(countFileName,FILE_WRITE);
-  */
-  
+    
   //Reset counter variable
   memset(counter, 0, sizeof(counter));
   
@@ -508,7 +508,7 @@ void bluetooth_interface(){
   bt1File.close();
 
   String countFileName = "L"+ektar+".csv";
-  if (SD.exists(countFileName)){ //New file to be created every instance, deleting old one
+  if (SD.exists(countFileName)){ //New file to be created every instance
     SD.remove(countFileName);
   }
   countFile = SD.open(countFileName,FILE_WRITE);
@@ -527,15 +527,17 @@ void bluetooth_interface(){
   if (countFile) {
     //Linear read from file, top to bottom
     //Serial.print("xFiles:");
-    Serial2.println("READY_OK");
+    Serial2.print("USAGELOGS,");
+    Serial2.print(",");
+    Serial2.println(users);
     while (countFile.available()) {
       String z = countFile.readStringUntil('\n'); //A Line of file
       Serial2.println(z);
     }
   }
   countFile.close();
-  ends: 
+  
+  ends:
   Serial.println("BT mOde Exit"); 
-  // close the file:
   
 }
