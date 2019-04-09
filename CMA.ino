@@ -13,7 +13,7 @@
 #define DISP_TIMEOUT 7000
 
 #define ADMIN_CRD_1 49 //Admin Card for viewing Logs
-#define ADMIN_CRD_2 50 //ADmin Card 
+#define ADMIN_CRD_2 50 //Admin Card 2
 
 #define RST_PIN_rc522         48           // Configurable, see typical pin layout 
 #define SS_PIN_rc522          53         // Configurable, see typical pin layout 
@@ -68,6 +68,13 @@ File bt1File;
 File countFile;
 String buffert;
 String uid_str;
+
+/**
+ * Bluetooth Interface
+ * Uses serial2 of MEGA, configurable
+ */
+const byte statePin = 47;
+const byte enPin = 45;  
 
 /*
  * Arduino Database
@@ -137,6 +144,11 @@ void setup() {
   Serial.print("No. of Users");
   Serial.println(users);
 
+  //Bluetooth Pins
+  pinMode(enPin,OUTPUT);
+  pinMode(statePin,INPUT);
+  digitalWrite(enPin,LOW);
+
   //Pins for Coffee Machine Activate pin
   pinMode(C_PIN,OUTPUT);
   digitalWrite(C_PIN,LOW);
@@ -150,12 +162,14 @@ String append_zero(int num); //Add zeros before single digit numbers and return 
 String get_datestring(); //Get the date as a string
 String get_timestring(); //Get the time as a string
 String get_dayofweekstr();  //Get the day of the week as a string
+String get_ampm();  //Get AM or PM for 12 Hour format
 int search_id(unsigned long uidd);
 String get_usrname(int index); //Display corresponding username from the matched index
 void disp_swiped(int index); //Display info when swiping card
 void log_swiped(unsigned long uidd, int index, bool flag); // Store usage log into SD card
 void activate_machine(); //Activate the coffee machine
 void disp_clock(); //Display clockface (current) 
+bool bluetooth_check(); //Check if BT connection is present
 void bluetooth_interface(); //Go into the bluetooth interface
 
 
@@ -339,16 +353,13 @@ String get_usrname(int index){
 
 String get_datestring(){
   DateTime now = rtc.now();
-  String date = String(now.day())+'/'+String(monthsOfYear[now.month()])+'/'+String(now.year());
+  String date = append_zero(now.day())+'-'+String(monthsOfYear[now.month()])+'-'+String(now.year());
   return date;
 }
 
 String get_timestring(){
   DateTime now = rtc.now();
-  String ampm =" AM";
-  if(now.hour()/12 >= 1)
-    ampm = " PM";
-  String timestr = String(now.hour()%12)+':'+String(now.minute())+':'+String(now.second()+ampm);
+  String timestr = String(now.hour()%12)+':'+append_zero(now.minute())+':'+append_zero(now.second());
   return timestr;
 }
  
@@ -356,6 +367,14 @@ String get_dayofweekstr(){
   DateTime now = rtc.now();
   String dow = String(daysOfTheWeek[now.dayOfTheWeek()]);
   return dow;
+}
+
+String get_ampm(){
+  DateTime now = rtc.now();
+  String ampm ="AM";
+  if(now.hour()/12 >= 1)
+    ampm = "PM";
+  return ampm;
 }
 
 String append_zero(int num){
@@ -437,15 +456,34 @@ void disp_clock(){
   display.drawLine(0, 63, 127, 63, WHITE);
   display.drawLine(127, 0, 127, 63, WHITE);
   
-  //Draw DoW
+  //Draw Watch (not wall clock) Face
+  //Display Date and DoW
+  display.setFont();
   display.setCursor(3,5);
   display.setTextSize(0);   
   display.print("Today is ");
   display.print(get_dayofweekstr());
+  display.setCursor(6,50);
+  display.print(get_datestring());
+  
+  //Display Time
   display.setCursor(3,25);
+  //display.setFont(&Open_Sans_Light_15);
   display.setTextSize(2);
   display.print(get_timestring());
+  display.setTextSize(0);
+  display.setFont(&Open_Sans_Light_15);
+  display.setCursor(102,38);
+  display.print(get_ampm());
   display.display();
+
+}
+
+bool bluetooth_check(){
+  if(digitalRead(statePin)){
+    return true;
+  }
+  return false;
 }
 
 void bluetooth_interface(){
@@ -456,6 +494,12 @@ void bluetooth_interface(){
   Serial2.println("Please state the nature of the Coffee Emergency");
 
   //Put some connection checking condition here
+  while(!bluetooth_check()){
+    //Wait till bluetooth connection is available
+    Serial.println("BT not available");
+  }
+  Serial.println("BT check PASS");
+  
   Serial2.println("READY_OK");
   
   while(!Serial2.available()){
@@ -463,12 +507,16 @@ void bluetooth_interface(){
   }
   
   String ektar = Serial2.readString();
+  ektar.trim();
   //String portra = "201904"; //Internal testing purposes till next line
   //ektar = portra;
   
-  if(ektar.equals("SETTIME"){ //Time setting cases
+  if(ektar.equals("SETTIME")){ //Time setting cases
     Serial.println("Setting the time");
+    Serial2.println("Enter date in DDMMYYYY format");
     //Setting time interface here
+
+    goto ends;
     
   }
   String line;
@@ -477,6 +525,7 @@ void bluetooth_interface(){
     Serial2.println("DATA_DONT_EXIST");
     goto ends;
   }
+  
   File bt1File = SD.open("U0"+ektar+".csv",FILE_READ);
     
   //Reset counter variable
@@ -518,7 +567,7 @@ void bluetooth_interface(){
     //Serial.print(z);
     //Serial.print(":");
     //Serial.println(counter[z]);
-    String entry_z = String(z) + "," +get_usrname(z) +"," + counter[z];
+    String entry_z = String(z) + "," + get_usrname(z) +"," + counter[z];
     //Serial.println(entry_z);
     countFile.println(entry_z);
   }
@@ -528,7 +577,6 @@ void bluetooth_interface(){
     //Linear read from file, top to bottom
     //Serial.print("xFiles:");
     Serial2.print("USAGELOGS,");
-    Serial2.print(",");
     Serial2.println(users);
     while (countFile.available()) {
       String z = countFile.readStringUntil('\n'); //A Line of file
