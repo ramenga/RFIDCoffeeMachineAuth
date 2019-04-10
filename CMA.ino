@@ -37,6 +37,10 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 unsigned long timepiece;
 bool dispState = false;
 bool lastDispState = false;
+//Vars for display animations
+byte aVar1 = 0;
+byte aVar2 = 0;
+byte aVar3 = 0;
  
 
 /*
@@ -497,6 +501,7 @@ void bluetooth_interface(){
   while(!bluetooth_check()){
     //Wait till bluetooth connection is available
     Serial.println("BT not available");
+    display_bluetooth(true, false, false);
   }
   Serial.println("BT check PASS");
   
@@ -504,10 +509,11 @@ void bluetooth_interface(){
   
   while(!Serial2.available()){
     //Wait till serial data is present
+    display_bluetooth(false, true, false);
   }
   
   String ektar = Serial2.readString();
-  ektar.trim();
+  ektar.trim(); //Remove white spaces or '\n'
   //String portra = "201904"; //Internal testing purposes till next line
   //ektar = portra;
   
@@ -520,12 +526,12 @@ void bluetooth_interface(){
     
   }
   String line;
-  ektar.trim(); //Remove white spaces or '\n'
+  
   if ( !SD.exists("U0"+ektar+".csv")){
     Serial2.println("DATA_DONT_EXIST");
     goto ends;
   }
-  
+  display_bluetooth(false, false, true);
   File bt1File = SD.open("U0"+ektar+".csv",FILE_READ);
     
   //Reset counter variable
@@ -587,5 +593,52 @@ void bluetooth_interface(){
   
   ends:
   Serial.println("BT mOde Exit"); 
+}
+
+void draw_edges(){
+  display.drawLine(0, 0, 128, 0, WHITE);
+  display.drawLine(0, 0, 0, 64, WHITE);
+  display.drawLine(0, 63, 127, 63, WHITE);
+  display.drawLine(127, 0, 127, 63, WHITE);
+}
+
+void display_bluetooth(bool connection, bool command, bool computing){
+  //Use aVar1,aVar2,aVar3... for animations
+
   
+  if(connection){
+    //Connection not established
+    display.clearDisplay();
+    draw_edges();
+    display.setFont(&Open_Sans_Light_15);
+    display.setCursor(3,12);
+    display.setTextSize(0); 
+    display.print("Bluetooth Waiting .....");
+    display.display();
+  
+  
+ 
+  }
+
+  if(command){
+    //Serial command not yet received, awaiting orders 
+    display.clearDisplay();
+    draw_edges();
+    display.setFont(&Open_Sans_Light_15);
+    display.setCursor(3,12);
+    display.setTextSize(0); 
+    display.print("Awaiting Command .....");
+    display.display();
+  }
+
+  if(computing){
+    //Currently computing answers
+    display.clearDisplay();
+    draw_edges();
+    display.setFont(&Open_Sans_Light_15);
+    display.setCursor(3,12);
+    display.setTextSize(0); 
+    display.print("Computing .....");
+    display.display();
+  }
 }
