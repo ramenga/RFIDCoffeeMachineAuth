@@ -41,6 +41,7 @@ bool lastDispState = false;
 byte aVar1 = 0;
 byte aVar2 = 0;
 byte aVar3 = 0;
+bool aBool1 = false;
  
 
 /*
@@ -55,6 +56,8 @@ char monthsOfYear[12][12] = {"January", "February", "March", "April", "May", "Ju
 unsigned long clockcounter;
 bool clockState = false;
 bool lastClockState = false;
+bool initialClock = true;
+const int initialTimeout = 40000;
 
 /*
  * SD Card Segment
@@ -175,11 +178,18 @@ void activate_machine(); //Activate the coffee machine
 void disp_clock(); //Display clockface (current) 
 bool bluetooth_check(); //Check if BT connection is present
 void bluetooth_interface(); //Go into the bluetooth interface
+void draw_edges(); //Draw lines on edges of display
+void display_bluetooth(bool connection, bool command, bool computing); //Display bluetooth screens in Admin Mode
 
 
 
 
 void loop() {  
+
+  if(initialClock && millis()>initialTimeout){
+    initialClock = false;
+    clockState = true;
+  }
   
   if(mfrc522.PICC_IsNewCardPresent()) {
   unsigned long uid = getID();
@@ -191,12 +201,6 @@ void loop() {
     Serial.println(get_dayofweekstr());
     Serial.println(get_timestring());
     
-    display.clearDisplay();
-    display.setTextSize(4);             
-    display.setTextColor(WHITE);        // Draw white text
-    display.setCursor(0,0);
-    //display.println(uid,HEX);
-    //display.display();
     unsigned long start,stopp;
     Serial.println("Into search fn");
     start = millis();
@@ -220,7 +224,6 @@ void loop() {
     log_swiped(uid,a,false);  // Log the swiped card to file
     activate_machine(); // Activate the Coffee Machine
 
-    
   }
   }
   exits:
@@ -258,7 +261,7 @@ void loop() {
 
     if ( clockState == true ){
       //Now you can update the clock
-      
+      initialClock = false;
       disp_clock();
     }
 
@@ -321,16 +324,19 @@ void disp_swiped(int index){  ///SWIPED DISPLAY
   clockState = false; //Disable displaying of clock
   String usr_name = get_usrname(index);
 
-    display.clearDisplay();
+    display.clearDisplay();            
+    display.setTextColor(WHITE);        // Draw white text
+    display.setCursor(0,0);
 
-    display.drawLine(0, 0, 128, 0, WHITE);//Top
-    display.drawLine(0, 0, 0, 16, WHITE); //Left
-    //display.drawLine(0, 63, 58, 63, WHITE); //Bottom
-    //display.drawLine(68, 63, 127, 63, WHITE); //Bottom
-    display.drawLine(127, 0, 127, 16, WHITE); //Right
+    display.drawLine(0, 0, 128, 0, WHITE);//Top Line
+    display.drawLine(0, 0, 0, 6, WHITE); //Top Left
+    display.drawLine(127, 0, 127, 6, WHITE); //Top Right
+    display.drawLine(0, 63, 127, 63, WHITE);//Bottom Line
+    display.drawLine(127, 57, 127, 63, WHITE);//Bottom Right
+    display.drawLine(0, 57, 0, 63, WHITE);//Bottom Left
     display.setFont(&Open_Sans_Light_15);
     display.setTextSize(0);
-    display.setCursor(8,14);
+    display.setCursor(20,14);
     
     display.println("Welcome !!");
     display.setTextSize(1);
@@ -357,7 +363,8 @@ String get_usrname(int index){
 
 String get_datestring(){
   DateTime now = rtc.now();
-  String date = append_zero(now.day())+'-'+String(monthsOfYear[now.month()])+'-'+String(now.year());
+  String date = append_zero(now.day())+'-'+String(monthsOfYear[now.month()-1])+'-'+String(now.year());
+  //String date = append_zero(now.day())+'-'+String(now.month())+'-'+String(now.year());
   return date;
 }
 
@@ -453,7 +460,7 @@ void activate_machine(){
 
 void disp_clock(){
   display.clearDisplay();
-  
+  display.setTextColor(WHITE); 
   //Draw Lines on edges
   display.drawLine(0, 0, 128, 0, WHITE);
   display.drawLine(0, 0, 0, 64, WHITE);
@@ -467,11 +474,11 @@ void disp_clock(){
   display.setTextSize(0);   
   display.print("Today is ");
   display.print(get_dayofweekstr());
-  display.setCursor(6,50);
+  display.setCursor(9,50);
   display.print(get_datestring());
   
   //Display Time
-  display.setCursor(3,25);
+  display.setCursor(5,25);
   //display.setFont(&Open_Sans_Light_15);
   display.setTextSize(2);
   display.print(get_timestring());
@@ -498,6 +505,7 @@ void bluetooth_interface(){
   Serial2.println("Please state the nature of the Coffee Emergency");
 
   //Put some connection checking condition here
+  beginn:
   while(!bluetooth_check()){
     //Wait till bluetooth connection is available
     Serial.println("BT not available");
@@ -510,6 +518,9 @@ void bluetooth_interface(){
   while(!Serial2.available()){
     //Wait till serial data is present
     display_bluetooth(false, true, false);
+    if(!bluetooth_check()){
+      goto beginn;
+    }
   }
   
   String ektar = Serial2.readString();
@@ -521,14 +532,27 @@ void bluetooth_interface(){
     Serial.println("Setting the time");
     Serial2.println("Enter date in DDMMYYYY format");
     //Setting time interface here
-
+    while(!Serial2.available()){
+      //Wait till serial data is present
+    }
+    String ektar = Serial2.readString();
+    ektar.trim();
+    char c[8];
+    strcpy(c,ektar.c_str());
+    unsigned long values = (unsigned long) strtoul(c,NULL,10);
+    int date = values/1000000;
+    values = values%1000000;
+    int months = values/10000;
+    Serial.println("date:"+String(date));
+    Serial.println(values);
+    Serial.println("months:"+String(months));
     goto ends;
     
   }
   String line;
   
   if ( !SD.exists("U0"+ektar+".csv")){
-    Serial2.println("DATA_DONT_EXIST"); //Data dont care, but you do 
+    Serial2.println("DATA_DONT_EXIST");
     goto ends;
   }
   display_bluetooth(false, false, true);
@@ -592,7 +616,9 @@ void bluetooth_interface(){
   countFile.close();
   
   ends:
-  Serial.println("BT mOde Exit"); 
+  Serial.println("BT mOde Exit");
+  display.clearDisplay(); 
+  display.display();
 }
 
 void draw_edges(){
@@ -604,39 +630,73 @@ void draw_edges(){
 
 void display_bluetooth(bool connection, bool command, bool computing){
   //Use aVar1,aVar2,aVar3... for animations
-
+  display.setTextColor(WHITE); 
   
-  if(connection){
-    //Connection not established
+  if(connection){ 
+    //When BT connection is not established
     display.clearDisplay();
     draw_edges();
     display.setFont(&Open_Sans_Light_15);
-    display.setCursor(3,12);
+    display.setCursor(5,14);
     display.setTextSize(0); 
-    display.print("Bluetooth Waiting .....");
+    display.print("Bluetooth not ");
+    display.setCursor(5,28);
+    display.print("connected.");
+    display.setCursor(5,47);
+    display.print("WAITING .....");
     display.display();
-  
-  
- 
+    aVar1++;
+    if(aBool1==false){
+      display.startscrolldiagright(0x00, 0x07);
+      aBool1=true;
+    }
+    
   }
 
   if(command){
     //Serial command not yet received, awaiting orders 
     display.clearDisplay();
+    display.stopscroll();
+    aBool1=false;
     draw_edges();
+    display.drawLine(22, 0, 0, 14, WHITE);
+    display.drawLine(106, 0, 128, 14, WHITE);
     display.setFont(&Open_Sans_Light_15);
-    display.setCursor(3,12);
+    display.setCursor(24,14);
     display.setTextSize(0); 
-    display.print("Awaiting Command .....");
+    display.print("Bluetooth");
+    display.setCursor(24,28);
+    display.print("connected.");
+    display.setCursor(3,47);
+    display.print("Await Command");
+    
+    if(aVar1>=128){
+      aVar1=0;
+    }
+    if(aVar2>=120){
+      aVar2=0;
+    }
+    if(aVar3>=120){
+      aVar3=0;
+    }
+    aVar1++;
+    aVar2+=3;
+    aVar3+=5;
+    display.drawLine(aVar1, 60, aVar1+5, 60, WHITE);
+    display.drawLine(aVar2, 58, aVar2+5, 58, WHITE);
+    display.drawLine(aVar3, 56, aVar3+7, 56, WHITE);
+    
     display.display();
   }
 
   if(computing){
     //Currently computing answers
     display.clearDisplay();
+    display.stopscroll();
+    aBool1=false;
     draw_edges();
     display.setFont(&Open_Sans_Light_15);
-    display.setCursor(3,12);
+    display.setCursor(5,14);
     display.setTextSize(0); 
     display.print("Computing .....");
     display.display();
