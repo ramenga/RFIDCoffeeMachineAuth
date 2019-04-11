@@ -1,3 +1,10 @@
+/**
+* Uses HC05, I2c DS3231, SPI RC522,  
+* SPI SD Module, i2c 0.96 Oled Screen
+*
+*
+**/
+
 #include <SPI.h>
 #include <MFRC522.h>
 #include <SD.h>
