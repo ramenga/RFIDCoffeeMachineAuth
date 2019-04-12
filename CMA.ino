@@ -1,10 +1,3 @@
-/**
-* Uses HC05, I2c DS3231, SPI RC522,  
-* SPI SD Module, i2c 0.96 Oled Screen
-*
-*
-**/
-
 #include <SPI.h>
 #include <MFRC522.h>
 #include <SD.h>
@@ -187,6 +180,7 @@ bool bluetooth_check(); //Check if BT connection is present
 void bluetooth_interface(); //Go into the bluetooth interface
 void draw_edges(); //Draw lines on edges of display
 void display_bluetooth(bool connection, bool command, bool computing); //Display bluetooth screens in Admin Mode
+void display_settime(bool beforeSet); //Setting time through BT interface
 
 
 
@@ -469,10 +463,7 @@ void disp_clock(){
   display.clearDisplay();
   display.setTextColor(WHITE); 
   //Draw Lines on edges
-  display.drawLine(0, 0, 128, 0, WHITE);
-  display.drawLine(0, 0, 0, 64, WHITE);
-  display.drawLine(0, 63, 127, 63, WHITE);
-  display.drawLine(127, 0, 127, 63, WHITE);
+  draw_edges();
   
   //Draw Watch (not wall clock) Face
   //Display Date and DoW
@@ -508,7 +499,7 @@ void bluetooth_interface(){
   //Some graphics
   display.clearDisplay();
   
-  Serial2.println("KNI Coffee Machine 2000");
+  Serial2.println("NIELIT Coffee Machine 2000");
   Serial2.println("Please state the nature of the Coffee Emergency");
 
   //Put some connection checking condition here
@@ -537,22 +528,35 @@ void bluetooth_interface(){
   
   if(ektar.equals("SETTIME")){ //Time setting cases
     Serial.println("Setting the time");
-    Serial2.println("Enter date in DDMMYYYY format");
+    Serial2.println("Enter date & time in DDMMYYYYHHMM format");
     //Setting time interface here
+    display_settime(true);
     while(!Serial2.available()){
       //Wait till serial data is present
     }
     String ektar = Serial2.readString();
     ektar.trim();
-    char c[8];
-    strcpy(c,ektar.c_str());
-    unsigned long values = (unsigned long) strtoul(c,NULL,10);
+    char dates[8];
+    char times[4];
+    Serial.println("Substring:"+ektar.substring(8, 12));
+    strcpy(dates,ektar.substring(0, 8).c_str());
+    strcpy(times,ektar.substring(8, 12).c_str());
+    unsigned long values = (unsigned long) strtoul(dates,NULL,10);
+    unsigned long values_1 = (unsigned long) strtoul(times,NULL,10);
     int date = values/1000000;
     values = values%1000000;
     int months = values/10000;
+    int years = values%10000;
+    int hours = values_1/100;
+    int minutes = values_1%100;
     Serial.println("date:"+String(date));
-    Serial.println(values);
     Serial.println("months:"+String(months));
+    Serial.println("year:"+String(years));
+    Serial.println("hour:"+String(hours));
+    Serial.println("min:"+String(minutes));
+    //Set the noew time into RTC module
+    rtc.adjust(DateTime(years, months, date, hours, minutes, 0));
+    display_settime(false);
     goto ends;
     
   }
@@ -708,4 +712,59 @@ void display_bluetooth(bool connection, bool command, bool computing){
     display.print("Computing .....");
     display.display();
   }
+}
+
+void display_settime(bool beforeSet){
+  //Screens for Date/Time setting through BT interface
+  display.setTextColor(WHITE); 
+  
+  if(beforeSet){ 
+    display.clearDisplay();
+    display.stopscroll();
+    
+    draw_edges();
+    display.drawLine(20, 0, 0, 14, WHITE);
+    display.drawLine(108, 0, 128, 14, WHITE);
+    display.setFont(&Open_Sans_Light_15);
+    display.setCursor(18,14);
+    display.setTextSize(0); 
+    display.print("Set the Time");
+    display.setCursor(24,28);
+    display.print("in Format:");
+    display.setFont();
+    display.setTextSize(2);
+    display.setCursor(3,31);
+    display.print("DDMMYYYY");
+    display.setCursor(3,47);
+    display.print("HHMM");
+    display.display();
+    
+  }else{
+    //Display set time for a brief period
+    display.clearDisplay();
+    //Draw Lines on edges
+    draw_edges();
+  
+    
+    //Display NEW Date and DoW
+    display.setFont();
+    display.setCursor(3,5);
+    display.setTextSize(0);   
+    display.print("The Date/Time is set to ");
+    display.setCursor(9,50);
+    display.print(get_datestring());
+  
+    //Display Time
+    display.setCursor(5,25);
+    //display.setFont(&Open_Sans_Light_15);
+    display.setTextSize(2);
+    display.print(get_timestring());
+    display.setTextSize(0);
+    display.setFont(&Open_Sans_Light_15);
+    display.setCursor(102,38);
+    display.print(get_ampm());
+    display.display();
+    delay(10000);
+  }
+
 }
