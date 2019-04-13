@@ -499,7 +499,7 @@ void bluetooth_interface(){
   //Some graphics
   display.clearDisplay();
   
-  Serial2.println("NIELIT Coffee Machine 2000");
+  Serial2.println("KNI Coffee Machine 2000");
   Serial2.println("Please state the nature of the Coffee Emergency");
 
   //Put some connection checking condition here
