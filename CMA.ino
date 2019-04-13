@@ -207,7 +207,7 @@ void loop() {
     start = millis();
     int a = search_id(uid);
     
-    if(a==50){ 
+    if(a == ADMIN_CRD_1 || a == ADMIN_CRD_2){ 
       bluetooth_interface(); //Admin Mode
       goto exits;
     }
@@ -680,7 +680,7 @@ void display_bluetooth(bool connection, bool command, bool computing){
     display.print("connected.");
     display.setCursor(3,47);
     display.print("Await Command");
-    
+    //A little animation
     if(aVar1>=128){
       aVar1=0;
     }
