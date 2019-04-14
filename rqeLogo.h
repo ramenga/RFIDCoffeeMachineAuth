@@ -1,0 +1,1 @@
+//Container for Logo Bitmap
