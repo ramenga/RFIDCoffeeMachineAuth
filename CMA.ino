@@ -7,6 +7,7 @@
 #include "RTClib.h"
 #include <EDB.h>
 #include<Fonts/LatoLight.h>
+#include "rqeLogo.h"
 
 #define C_PIN 13
 
@@ -35,6 +36,7 @@ int readSuccessful;
 #define OLED_RESET    -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 unsigned long timepiece;
+unsigned long ssTimeKeeper = 0;
 bool dispState = false;
 bool lastDispState = false;
 //Vars for display animations
@@ -42,6 +44,8 @@ byte aVar1 = 0;
 byte aVar2 = 0;
 byte aVar3 = 0;
 bool aBool1 = false;
+bool logoScroll = true;
+byte scrollMode = 0;
  
 
 /*
@@ -57,7 +61,7 @@ unsigned long clockcounter;
 bool clockState = false;
 bool lastClockState = false;
 bool initialClock = true;
-const int initialTimeout = 40000;
+const long initialTimeout = 40000;
 
 /*
  * SD Card Segment
@@ -186,6 +190,7 @@ void display_settime(bool beforeSet); //Setting time through BT interface
 
 
 void loop() {  
+  
 
   if(initialClock && millis()>initialTimeout){
     initialClock = false;
@@ -209,6 +214,7 @@ void loop() {
     
     if(a == ADMIN_CRD_1 || a == ADMIN_CRD_2){ 
       bluetooth_interface(); //Admin Mode
+      Serial.println("BT interface Exit");
       goto exits;
     }
     
@@ -228,6 +234,7 @@ void loop() {
   }
   }
   exits:
+  //Serial.println("EXITS");
 
   if (dispState != lastDispState){
       timepiece = millis();
@@ -262,8 +269,16 @@ void loop() {
 
     if ( clockState == true ){
       //Now you can update the clock
+      ssTimeKeeper+=1;
       initialClock = false;
-      disp_clock();
+      if(ssTimeKeeper%200<130){
+        //Something
+        disp_clock();
+        logoScroll = true;
+      }else{
+        display_scrollinglogo();
+      }
+      
     }
 
 }
@@ -325,7 +340,8 @@ void disp_swiped(int index){  ///SWIPED DISPLAY
   clockState = false; //Disable displaying of clock
   String usr_name = get_usrname(index);
 
-    display.clearDisplay();            
+    display.clearDisplay();
+    display.stopscroll();            
     display.setTextColor(WHITE);        // Draw white text
     display.setCursor(0,0);
 
@@ -460,6 +476,7 @@ void activate_machine(){
 }
 
 void disp_clock(){
+  display.stopscroll();
   display.clearDisplay();
   display.setTextColor(WHITE); 
   //Draw Lines on edges
@@ -497,6 +514,7 @@ bool bluetooth_check(){
 
 void bluetooth_interface(){
   //Some graphics
+  display.stopscroll();
   display.clearDisplay();
   
   Serial2.println("KNI Coffee Machine 2000");
@@ -629,7 +647,10 @@ void bluetooth_interface(){
   ends:
   Serial.println("BT mOde Exit");
   display.clearDisplay(); 
+  Serial.println("BT mOde Exit");
   display.display();
+  Serial.println("BT mOde Exit");
+  
 }
 
 void draw_edges(){
@@ -642,6 +663,7 @@ void draw_edges(){
 void display_bluetooth(bool connection, bool command, bool computing){
   //Use aVar1,aVar2,aVar3... for animations
   display.setTextColor(WHITE); 
+  display.stopscroll();
   
   if(connection){ 
     //When BT connection is not established
@@ -680,7 +702,7 @@ void display_bluetooth(bool connection, bool command, bool computing){
     display.print("connected.");
     display.setCursor(3,47);
     display.print("Await Command");
-    //A little animation
+    
     if(aVar1>=128){
       aVar1=0;
     }
@@ -746,7 +768,7 @@ void display_settime(bool beforeSet){
     draw_edges();
   
     
-    //Display NEW Date and DoW
+    //Display NEW Date
     display.setFont();
     display.setCursor(3,5);
     display.setTextSize(0);   
@@ -754,7 +776,7 @@ void display_settime(bool beforeSet){
     display.setCursor(9,50);
     display.print(get_datestring());
   
-    //Display Time
+    //Display NEW Time
     display.setCursor(5,25);
     //display.setFont(&Open_Sans_Light_15);
     display.setTextSize(2);
@@ -767,4 +789,36 @@ void display_settime(bool beforeSet){
     delay(10000);
   }
 
+}
+
+void display_scrollinglogo(){
+  if(logoScroll){
+    display.clearDisplay();
+    draw_edges();
+    display.drawBitmap(0, 0,  rqe_128_64, 128, 64, 1);
+    
+    display.display();
+    logoScroll = false;
+    switch(scrollMode){
+      case 0:
+        display.startscrolldiagleft(0x00, 0x07);
+        scrollMode=1;
+        break;
+      case 1:
+        display.startscrolldiagright(0x07, 0x00);
+        scrollMode=2;
+        break;
+      case 2:
+        display.startscrollleft(0x00, 0x0F);
+        scrollMode=3;
+        break;
+      case 3:
+        display.startscrollright(0x00, 0x0F);
+        scrollMode=0;
+        break;
+    }
+  }
+    //delay(20000);
+    //display.stopscroll();
+    //display.clearDisplay();
 }
