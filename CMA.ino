@@ -1,3 +1,8 @@
+/**
+*Coffee Machine Authenticator
+*Uses multiple components
+**/
+
 #include <SPI.h>
 #include <MFRC522.h>
 #include <SD.h>
