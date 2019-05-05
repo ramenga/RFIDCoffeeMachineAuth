@@ -1,6 +1,7 @@
 /**
 *Coffee Machine Authenticator
 *Uses multiple components
+* Need bugifx for Nonstored card since it will default to highest
 **/
 
 #include <SPI.h>
