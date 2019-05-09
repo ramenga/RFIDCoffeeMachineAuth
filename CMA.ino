@@ -1,7 +1,7 @@
 /**
 *Coffee Machine Authenticator
 *Uses multiple components
-* Need bugifx for Nonstored card since it will default to highest count, needs immediate action
+*Needs bugfix for Nonstored card since it will default to highest count, needs immediate action
 **/
 
 #include <SPI.h>
