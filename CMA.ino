@@ -224,6 +224,10 @@ void loop() {
       goto exits;
     }
     
+    if(a == -1){
+      goto exits;
+    }
+    
     //display.println(a);
     //display.display();
     stopp = millis();
@@ -304,6 +308,7 @@ unsigned long getID(){
 }
 
 int search_id(unsigned long uidd){
+  bool matched_any = false;
   xFile = SD.open(card_ids);
   int index=0;
   if (xFile) {
@@ -327,6 +332,7 @@ int search_id(unsigned long uidd){
           
       if(A==uidd){
         //Serial.println("MATCHES");
+        matched_any = true;
         break;
       }
       index+=1;
@@ -338,7 +344,11 @@ int search_id(unsigned long uidd){
     xFile.close();
     
     //Return index of the match
-    return index;
+    if (matched_any){
+        return index;
+    }
+    else
+        return -1;
   }
 }
 
